@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wallets-config
+  namespace: formance
+type: Opaque
+stringData:
+  # 指向 ledger 服务的内部地址
+  STACK_URL: "http://ledger-proxy.formance.svc.cluster.local:80" # 指向 Nginx 代理
+  # 根据 serve.go 中的默认值或您的需求设置
+  LEDGER_NAME: "wallets-002"
+  # 暂时禁用认证，留空
+  STACK_CLIENT_ID: ""
+  STACK_CLIENT_SECRET: ""
+  # 其他 wallets 可能需要的配置
+  LISTEN: ":8080" # 默认监听端口
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wallets
+  namespace: formance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wallets
+  template:
+    metadata:
+      labels:
+        app: wallets
+    spec:
+      containers:
+      - name: wallets
+        image: ghcr.io/formancehq/wallets:latest # 使用用户指定的镜像 tag
+        ports:
+        - containerPort: 8080 # 与 LISTEN 配置匹配
+        envFrom:
+        - secretRef:
+            name: wallets-config # 从 Secret 注入环境变量
+        # 假设官方镜像默认命令是 "serve"
+        # command: ["/path/to/wallets/binary"] # 如果需要指定
+        # args: ["serve"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wallets
+  namespace: formance
+spec:
+  selector:
+    app: wallets
+  ports:
+    - protocol: TCP
+      port: 8080 # Service 端口
+      targetPort: 8080 # Pod 端口
+  type: NodePort

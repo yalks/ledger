@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-creds
+  namespace: formance
+type: Opaque
+stringData: # 使用 stringData 可以避免手动进行 base64 编码
+  POSTGRES_USER: "ledger"
+  POSTGRES_PASSWORD: "ledger" # 生产环境请使用更安全的密码
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: formance
+spec:
+  accessModes:
+    - ReadWriteOnce # Minikube 通常支持这个模式
+  resources:
+    requests:
+      storage: 1Gi # 请求 1GB 存储，可以根据需要调整
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: formance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16-alpine # 使用官方镜像
+        ports:
+        - containerPort: 5432
+        envFrom:
+        - secretRef:
+            name: postgres-creds # 从 Secret 注入环境变量
+        env:
+        - name: POSTGRES_DB # docker-compose.yml 中定义的数据库名
+          value: "ledger"
+        - name: PGDATA # 显式指定数据目录，与 volumeMount 匹配
+          value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data # 挂载 PVC
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: formance
+spec:
+  selector:
+    app: postgres
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+  type: ClusterIP # 仅集群内部访问

@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger-proxy
+  namespace: formance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ledger-proxy
+  template:
+    metadata:
+      labels:
+        app: ledger-proxy
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:stable-alpine # 使用官方 Nginx 镜像
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: nginx-config-volume
+          mountPath: /etc/nginx/conf.d/default.conf # 挂载配置文件
+          subPath: default.conf # 只挂载 ConfigMap 中的 default.conf 文件
+      volumes:
+      - name: nginx-config-volume
+        configMap:
+          name: nginx-proxy-conf # 引用我们创建的 ConfigMap
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ledger-proxy # Service 名称
+  namespace: formance
+spec:
+  selector:
+    app: ledger-proxy # 选择 Nginx Pod
+  ports:
+    - protocol: TCP
+      port: 80 # Service 监听 80 端口
+      targetPort: 80 # 转发到 Nginx Pod 的 80 端口
+  type: ClusterIP # 仅集群内部访问

@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger-worker
+  namespace: formance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ledger
+      component: worker # 区分 server 和 worker
+  template:
+    metadata:
+      labels:
+        app: ledger
+        component: worker
+    spec:
+      containers:
+      - name: ledger-worker
+        image: ghcr.io/formancehq/ledger:latest # 使用用户指定的镜像 tag
+        envFrom:
+        - secretRef:
+            name: ledger-config # 复用 server 的配置 Secret
+        # 移除错误的 command 和 args，使用镜像默认入口点

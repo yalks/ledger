@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ledger-config
+  namespace: formance
+type: Opaque
+stringData:
+  # 从 postgres-creds Secret 获取用户名和密码来构建 URI
+  # 注意：这种直接引用 Secret 值的方式在标准 Kubernetes 中不直接支持
+  # 通常需要一个初始化容器或启动脚本来读取 Secret 并设置最终的 URI
+  # 或者在应用代码中处理。
+  # 为了简化，这里我们先硬编码，但生产环境需要更安全的处理方式。
+  POSTGRES_URI: "postgresql://ledger:ledger@postgres.formance.svc.cluster.local:5432/ledger?sslmode=disable"
+  # 其他 ledger 可能需要的配置 (根据 docker-compose.yml)
+  OTEL_SERVICE_NAME: "ledger"
+  # OTEL_METRICS_EXPORTER: "otlp" # 暂时禁用监控
+  # OTEL_METRICS_EXPORTER_OTLP_ENDPOINT: "otel:4317"
+  # OTEL_METRICS_EXPORTER_OTLP_INSECURE: "true"
+  # OTEL_TRACES_EXPORTER: "otlp"
+  # OTEL_TRACES_EXPORTER_OTLP_ENDPOINT: "otel:4317"
+  # OTEL_TRACES_EXPORTER_OTLP_INSECURE: "true"
+  AUTO_UPGRADE: "true" # 保持 docker-compose 中的设置
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger
+  namespace: formance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ledger
+      component: server # 区分 server 和 worker
+  template:
+    metadata:
+      labels:
+        app: ledger
+        component: server
+    spec:
+      containers:
+      - name: ledger
+        image: ghcr.io/formancehq/ledger:latest # 使用官方镜像
+        ports:
+        - containerPort: 3068
+        envFrom:
+        - secretRef:
+            name: ledger-config # 从 Secret 注入环境变量
+        # 官方镜像的入口点可能已经是 "ledger"，并且默认命令是 "serve"
+        # 如果不是，需要取消注释并设置 command/args
+        # command: ["/usr/bin/ledger"]
+        # args: ["serve"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ledger
+  namespace: formance
+spec:
+  selector:
+    app: ledger
+    component: server # 确保 Service 指向 server Pod
+  ports:
+    - protocol: TCP
+      port: 3068
+      targetPort: 3068
+  type: ClusterIP
